@@ -114,19 +114,18 @@ class ASR_BIAS_EVAL(object):
             "ref_token_count": self.ref_token_count,
             'Word_Error_Rate': wer, 
             "Word_Error_Count": self.error_count,
-            'Word_Match_Rate': wrr, 
-            "Word_Match_Count": self.match_count,
             "Confusions":{
                 "Insertions": len(self.insertion_table),
                 "Deletions": len(self.deletion_table),
                 "Substitutions": len(self.substitution_table),           
             },
+            'WER_by_sent_len':{
+                length: self.mean(wers) for length, wers in self.wer_bins.items()
+            },
             # 'Phrase_Error_Rate': per, match_count, ref_token_count),
             # 'Phrase_Match_Rate': pmr, match_count, ref_token_count),
-            'Sentence_Error_Rate': ser, 
-            "Sentence_Error_Count": self.sent_error_count,
-            'Sentence_Match_Rate': smr, 
-            "Sentence_Match_Count": self.sent_match_count
+            # 'Sentence_Error_Rate': ser, 
+            # "Sentence_Error_Count": self.sent_error_count,
         }
 
         self.reset_global_variables()
