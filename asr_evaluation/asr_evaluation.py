@@ -34,8 +34,9 @@ class ASR_BIAS_EVAL(object):
         self.files_tail_ids = False
         self.confusions = False
         self.min_count = 0
-        self.phrase_len = 1
         self.wer_vs_length_p = True
+
+        self.phrase_len = 3
 
         # more defaults, For keeping track of the total number of tokens, errors, and matches
         self.ref_token_count = 0
@@ -57,6 +58,7 @@ class ASR_BIAS_EVAL(object):
         # and/or shorter sentences
         self.lengths = []
         self.error_rates = []
+        self.per_bins = defaultdict(list)
         self.wer_bins = defaultdict(list)
         self.wer_vs_length = defaultdict(list)
         # Tables for keeping track of which words get confused with one another
@@ -112,6 +114,7 @@ class ASR_BIAS_EVAL(object):
         self.asr_evaluation_result =  {
             'Sentence#': self.counter,
             "ref_token_count": self.ref_token_count,
+            "ref_phrase_count": self.ref_phrase_count,
             'Word_Error_Rate': wer, 
             "Word_Error_Count": self.error_count,
             "Confusions":{
@@ -122,10 +125,13 @@ class ASR_BIAS_EVAL(object):
             'WER_by_sent_len':{
                 length: self.mean(wers) for length, wers in self.wer_bins.items()
             },
-            # 'Phrase_Error_Rate': per, match_count, ref_token_count),
-            # 'Phrase_Match_Rate': pmr, match_count, ref_token_count),
             # 'Sentence_Error_Rate': ser, 
             # "Sentence_Error_Count": self.sent_error_count,
+            'Phrase_Error_Rate': per,
+            'Phrase_Error_Count': self.ref_phrase_count,
+            "PER_by_sent_len":{
+                length: self.mean(pers) for length, pers in self.per_bins.items()
+            }
         }
 
         self.reset_global_variables()
@@ -160,7 +166,7 @@ class ASR_BIAS_EVAL(object):
         # relevant counts that we need.
         sm = SequenceMatcher(a=ref, b=hyp)
         errors = self.get_error_count(sm)
-        phr_errors = self.get_phrase_count(sm)
+        phr_errors = self.get_phrase_error_count(ref,hyp)
         matches = self.get_match_count(sm)
         ref_length = len(ref)
 
@@ -169,6 +175,7 @@ class ASR_BIAS_EVAL(object):
         self.match_count += matches
         self.phrase_error_count += phr_errors
         self.ref_token_count += ref_length
+        self.ref_phrase_count += len(ref)/self.phrase_len   ### Number of Phrases
 
         if errors != 0:
             self.sent_error_count += 1
@@ -187,6 +194,7 @@ class ASR_BIAS_EVAL(object):
         error_rate = errors * 1.0 / len(ref) if len(ref) > 0 else float("inf")
         self.error_rates.append(error_rate)
         self.wer_bins[len(ref)].append(error_rate)
+        self.per_bins[len(ref)].append(phr_errors)
         return True
 
     def set_global_variables(self,args):
@@ -319,10 +327,19 @@ class ASR_BIAS_EVAL(object):
         error_lengths = [max(x[2] - x[1], x[4] - x[3]) for x in errors]
         return reduce(lambda x, y: x + y, error_lengths, 0)
 
-    def get_phrase_count(self,sm):
+    def get_phrase_error_count(self,seq1,seq2):
         """Return the number of phrasal errors"""
-        opcodes = sm.get_opcodes()
-        return 0
+        phr_errors = 0
+
+        if self.phrase_len < len(seq1) and self.phrase_len < len(seq2):
+            for i in range(len(seq1)-self.phrase_len):
+                for j in range(len(seq2)-self.phrase_len):
+                    sm_phrase = SequenceMatcher(seq1[i:i+self.phrase_len],seq2[i:i+self.phrase_len])
+                    opcodes = sm_phrase.get_opcodes()
+                    errors = [x for x in opcodes if x[0] in self.error_codes]
+                    if len(errors) != 0: phr_errors += 1
+
+        return phr_errors
 
     # TODO - This is long and ugly.  Perhaps we can break it up?
     # It would make more sense for this to just return the two strings...
